@@ -48,7 +48,10 @@ object Anagrams {
   }
 
   /** Converts a sentence into its character occurrence list. */
-  def sentenceOccurrences(s: Sentence): Occurrences = ???
+  def sentenceOccurrences(s: Sentence): Occurrences = {
+    val concatnated_s = s.mkString
+    wordOccurrences(concatnated_s)
+  }
 
   /** The `dictionaryByOccurrences` is a `Map` from different occurrences to a sequence of all
    *  the words that have that occurrence count.
@@ -65,10 +68,12 @@ object Anagrams {
    *    List(('a', 1), ('e', 1), ('t', 1)) -> Seq("ate", "eat", "tea")
    *
    */
-  lazy val dictionaryByOccurrences: Map[Occurrences, List[Word]] = ???
+  lazy val dictionaryByOccurrences: Map[Occurrences, List[Word]] =
+    // check assignment doc for usage of groupBy
+    dictionary.groupBy((x:Word)=> wordOccurrences(x))
 
   /** Returns all the anagrams of a given word. */
-  def wordAnagrams(word: Word): List[Word] = ???
+  def wordAnagrams(word: Word): List[Word] = dictionaryByOccurrences(wordOccurrences(word))
 
   /** Returns the list of all subsets of the occurrence list.
    *  This includes the occurrence itself, i.e. `List(('k', 1), ('o', 1))`
@@ -78,12 +83,15 @@ object Anagrams {
    *  Example: the subsets of the occurrence list `List(('a', 2), ('b', 2))` are:
    *
    *    List(
+   *      // _ is pivot
    *      List(),
    *      List(('a', 1)),
    *      List(('a', 2)),
+   *      // ('b', 1) is pivot
    *      List(('b', 1)),
    *      List(('a', 1), ('b', 1)),
    *      List(('a', 2), ('b', 1)),
+   *      // ('b', 2) is pivot
    *      List(('b', 2)),
    *      List(('a', 1), ('b', 2)),
    *      List(('a', 2), ('b', 2))
@@ -92,8 +100,14 @@ object Anagrams {
    *  Note that the order of the occurrence list subsets does not matter -- the subsets
    *  in the example above could have been displayed in some other order.
    */
-  def combinations(occurrences: Occurrences): List[Occurrences] = ???
-
+  def combinations(occurrences: Occurrences): List[Occurrences] = {
+    //note that Occurrences is nothing but "List[(Char, Int)]"
+    occurrences match {
+      case Nil => List(Nil)
+      case (char, count) :: tl =>
+        (for (rest <- combinations(tl); i <- 0 to count) yield if (i == 0) rest else (char, i) :: rest).toList
+    }
+  }
   /** Subtracts occurrence list `y` from occurrence list `x`.
    * 
    *  The precondition is that the occurrence list `y` is a subset of
@@ -104,8 +118,15 @@ object Anagrams {
    *  Note: the resulting value is an occurrence - meaning it is sorted
    *  and has no zero-entries.
    */
-  def subtract(x: Occurrences, y: Occurrences): Occurrences = ???
-
+  def subtract(x: Occurrences, y: Occurrences): Occurrences ={
+    //note that Occurrences is nothing but "List[(Char, Int)]" and it is analogous to Map
+    val xMap = x.toMap
+    // precondition: y is subset of x
+    val update_info = for (y_occur <- y) yield (y_occur._1, xMap(y_occur._1) - y_occur._2)
+    val updateMap = update_info.toMap
+    val ret = for (x_info<-x) yield if (update_info.exists(a=> a._1 == x_info._1)) (x_info._1,updateMap(x_info._1)) else x_info
+    ret.filter(x=>x._2!=0)
+  }
   /** Returns a list of all anagram sentences of the given sentence.
    *  
    *  An anagram of a sentence is formed by taking the occurrences of all the characters of
@@ -146,6 +167,32 @@ object Anagrams {
    *
    *  Note: There is only one anagram of an empty sentence.
    */
-  def sentenceAnagrams(sentence: Sentence): List[Sentence] = ???
+  def sentenceAnagrams(sentence: Sentence): List[Sentence] = {
+    val sentence_occurrence = sentenceOccurrences(sentence)
+
+    def sentenceAnagramsInner(occurrences: Occurrences):List[Sentence] = {
+      if (occurrences.isEmpty) List(Nil)
+      else {
+        for {
+          occurence_one <- combinations(occurrences) // List[Occ]
+          word <- dictionaryByOccurrences.getOrElse(occurence_one,List()) // List[Word] / List()이면 알아서 돌지 않음
+          rest <- sentenceAnagramsInner(subtract(occurrences,occurence_one)) // List[ Sent == List[Word] ]
+        } yield word::rest
+
+      }
+    }
+    sentenceAnagramsInner(sentence_occurrence)
+  }
 
 }
+
+//    sentenceAnagrams 함수 과정
+//    val combin_of_occurrence = combinations(sentence_occurrence)
+//    // 사전에 있는 되는 단어. Some((Occurrence,Some(단어))
+//    val approved = combin_of_occurrence.map(x=> {
+//      val word = dictionaryByOccurrences.get(x)
+//      if(word!= None) Some((x,word)) else None
+//      }
+//    ).filter(x=> x!=None)
+//    val combin_of_occurrence_new = approved.map{case(Some((o,Some(w)))) => combinations(subtract(sentence_occurrence,o))}
+//    val approved_new = ... 하다보니... 트리처럼 커진다. 재귀를 찾았다.
